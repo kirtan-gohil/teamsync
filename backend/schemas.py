@@ -95,4 +95,52 @@ class InterviewAnalysisResponse(BaseModel):
     analysis: Dict[str, Any]
     score: float
 
+# Authentication schemas
+class UserLogin(BaseModel):
+    email: EmailStr
+    password: str
+
+class UserRegister(BaseModel):
+    email: EmailStr
+    password: str
+    full_name: str
+
+class UserResponse(BaseModel):
+    id: int
+    email: str
+    full_name: str
+    role: str
+    is_active: bool
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+    user: UserResponse
+
+class UserResumeResponse(BaseModel):
+    id: int
+    resume_url: str
+    skills: List[str]
+    experience_years: int
+    education: Optional[str] = None
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+class JobMatchResponse(BaseModel):
+    job: JobResponse
+    match_percentage: float
+    matched_skills: List[str]
+    missing_skills: List[str]
+    reasoning: Optional[str] = None
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True
+
 

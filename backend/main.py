@@ -5,18 +5,22 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 import os
 from dotenv import load_dotenv
+from datetime import timedelta
 
 from database import get_db, engine, Base
-from models import Candidate, Job, Interview, Match
+from models import Candidate, Job, Interview, Match, User, UserResume, UserJobMatch
 from schemas import (
     CandidateCreate, CandidateResponse, 
     JobCreate, JobResponse,
     InterviewCreate, InterviewResponse,
-    MatchResponse
+    MatchResponse, UserLogin, UserRegister, Token, UserResponse,
+    UserResumeResponse, JobMatchResponse
 )
 from services.resume_parser import ResumeParser
 from services.matching_engine import MatchingEngine
 from services.interview_ai import InterviewAI
+from services.auth import authenticate_user, create_user, create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES
+from dependencies import get_current_active_user, get_admin_user
 
 load_dotenv()
 
@@ -52,6 +56,63 @@ async def root():
 @app.get("/health")
 async def health_check():
     return {"status": "healthy"}
+
+# Authentication endpoints
+@app.post("/api/auth/register", response_model=Token)
+async def register(user: UserRegister, db: Session = Depends(get_db)):
+    # Check if user already exists
+    db_user = db.query(User).filter(User.email == user.email).first()
+    if db_user:
+        raise HTTPException(
+            status_code=400,
+            detail="Email already registered"
+        )
+    
+    # Create new user
+    db_user = create_user(
+        db=db,
+        email=user.email,
+        password=user.password,
+        full_name=user.full_name,
+        role="user"
+    )
+    
+    # Create access token
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": str(db_user.id)}, expires_delta=access_token_expires
+    )
+    
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user": db_user
+    }
+
+@app.post("/api/auth/login", response_model=Token)
+async def login(user_credentials: UserLogin, db: Session = Depends(get_db)):
+    user = authenticate_user(db, user_credentials.email, user_credentials.password)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": str(user.id)}, expires_delta=access_token_expires
+    )
+    
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user": user
+    }
+
+@app.get("/api/auth/me", response_model=UserResponse)
+async def get_current_user_info(current_user: User = Depends(get_current_active_user)):
+    return current_user
 
 # Candidate endpoints
 @app.post("/api/candidates/", response_model=CandidateResponse)
@@ -248,6 +309,113 @@ async def get_interview(interview_id: int, db: Session = Depends(get_db)):
     if not interview:
         raise HTTPException(status_code=404, detail="Interview not found")
     return interview
+
+# User-specific endpoints
+@app.post("/api/user/upload-resume", response_model=UserResumeResponse)
+async def upload_user_resume(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    try:
+        # Save uploaded file
+        file_path = f"uploads/user_{current_user.id}_{file.filename}"
+        os.makedirs("uploads", exist_ok=True)
+        
+        with open(file_path, "wb") as buffer:
+            content = await file.read()
+            buffer.write(content)
+        
+        # Parse resume using AI
+        parsed_data = await resume_parser.parse_resume(file_path)
+        
+        # Create user resume record
+        user_resume = UserResume(
+            user_id=current_user.id,
+            resume_url=file_path,
+            skills=parsed_data.get("skills", []),
+            experience_years=parsed_data.get("experience_years", 0),
+            education=parsed_data.get("education", ""),
+            raw_data=parsed_data
+        )
+        
+        db.add(user_resume)
+        db.commit()
+        db.refresh(user_resume)
+        
+        return user_resume
+        
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.get("/api/user/resumes", response_model=List[UserResumeResponse])
+async def get_user_resumes(
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    resumes = db.query(UserResume).filter(UserResume.user_id == current_user.id).all()
+    return resumes
+
+@app.get("/api/user/job-matches", response_model=List[JobMatchResponse])
+async def get_user_job_matches(
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    # Get user's latest resume
+    latest_resume = db.query(UserResume).filter(
+        UserResume.user_id == current_user.id
+    ).order_by(UserResume.created_at.desc()).first()
+    
+    if not latest_resume:
+        raise HTTPException(status_code=404, detail="No resume found. Please upload a resume first.")
+    
+    # Get all active jobs
+    jobs = db.query(Job).filter(Job.status == "active").all()
+    matches = []
+    
+    for job in jobs:
+        # Calculate match using enhanced matching engine
+        match_score, matched_skills, missing_skills, reasoning = await matching_engine.calculate_user_job_match(
+            latest_resume, job
+        )
+        
+        # Create or update match record
+        existing_match = db.query(UserJobMatch).filter(
+            UserJobMatch.user_id == current_user.id,
+            UserJobMatch.job_id == job.id
+        ).first()
+        
+        if not existing_match:
+            match_record = UserJobMatch(
+                user_id=current_user.id,
+                resume_id=latest_resume.id,
+                job_id=job.id,
+                match_percentage=match_score,
+                matched_skills=matched_skills,
+                missing_skills=missing_skills,
+                reasoning=reasoning
+            )
+            db.add(match_record)
+        else:
+            existing_match.match_percentage = match_score
+            existing_match.matched_skills = matched_skills
+            existing_match.missing_skills = missing_skills
+            existing_match.reasoning = reasoning
+        
+        db.commit()
+        
+        matches.append(JobMatchResponse(
+            job=job,
+            match_percentage=match_score,
+            matched_skills=matched_skills,
+            missing_skills=missing_skills,
+            reasoning=reasoning,
+            created_at=existing_match.created_at if existing_match else None
+        ))
+    
+    # Sort by match percentage
+    matches.sort(key=lambda x: x.match_percentage, reverse=True)
+    return matches
 
 if __name__ == "__main__":
     import uvicorn
