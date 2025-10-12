@@ -1,16 +1,20 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
+import Landing from './pages/Landing';
 import Login from './pages/Login';
 import UserDashboard from './pages/UserDashboard';
 import AdminDashboard from './pages/AdminDashboard';
+import CreateJob from './pages/CreateJob';
+import Interview from './pages/Interview';
 import ProtectedRoute from './components/ProtectedRoute';
 
 function App() {
   return (
     <Router>
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
         <Routes>
+          <Route path="/" element={<Landing />} />
           <Route path="/login" element={<Login />} />
           <Route 
             path="/user/dashboard" 
@@ -28,8 +32,31 @@ function App() {
               </ProtectedRoute>
             } 
           />
-          <Route path="/" element={<Navigate to="/login" replace />} />
-          <Route path="*" element={<Navigate to="/login" replace />} />
+          <Route 
+            path="/admin" 
+            element={<Navigate to="/admin/dashboard" replace />} 
+          />
+          <Route 
+            path="/create-job" 
+            element={
+              <ProtectedRoute requiredRole="admin">
+                <CreateJob />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/user" 
+            element={<Navigate to="/user/dashboard" replace />} 
+          />
+          <Route 
+            path="/interview/:interviewId" 
+            element={
+              <ProtectedRoute requiredRole="user">
+                <Interview />
+              </ProtectedRoute>
+            } 
+          />
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
         <Toaster position="top-right" />
       </div>

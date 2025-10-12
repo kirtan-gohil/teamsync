@@ -116,7 +116,7 @@ const AdminDashboard: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
       {/* Header */}
       <div className="bg-white shadow">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -242,7 +242,7 @@ const AdminDashboard: React.FC = () => {
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-gray-900">{candidate.name}</p>
-                        <p className="text-sm text-gray-500">Score: {candidate.score.toFixed(1)}</p>
+                        <p className="text-sm text-gray-500">Score: {candidate.score ? candidate.score.toFixed(1) : 'N/A'}</p>
                       </div>
                       <div className="text-sm text-gray-500">
                         {new Date(candidate.created_at).toLocaleDateString()}
@@ -261,7 +261,10 @@ const AdminDashboard: React.FC = () => {
             <div className="px-6 py-4 border-b border-gray-200">
               <div className="flex justify-between items-center">
                 <h3 className="text-lg font-medium text-gray-900">Jobs</h3>
-                <button className="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700">
+                <button 
+                  onClick={() => window.location.href = '/create-job'}
+                  className="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700"
+                >
                   Create Job
                 </button>
               </div>
@@ -317,7 +320,7 @@ const AdminDashboard: React.FC = () => {
                       </div>
                       <div className="text-right">
                         <div className="text-2xl font-bold text-indigo-600">
-                          {candidate.score.toFixed(1)}
+                          {candidate.score ? candidate.score.toFixed(1) : 'N/A'}
                         </div>
                         <div className="text-sm text-gray-500">Score</div>
                       </div>
@@ -356,7 +359,7 @@ const AdminDashboard: React.FC = () => {
                         }`}>
                           {interview.status}
                         </span>
-                        {interview.score > 0 && (
+                        {interview.score && interview.score > 0 && (
                           <p className="text-sm text-gray-500 mt-2">
                             Score: {interview.score.toFixed(1)}
                           </p>

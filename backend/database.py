@@ -7,11 +7,15 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Database URL
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://user:password@localhost/recruitment_db")
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./teamsync.db")
 
-engine = create_engine(DATABASE_URL)
+# Create engine
+engine = create_engine(
+    DATABASE_URL,
+    connect_args={"check_same_thread": False} if "sqlite" in DATABASE_URL else {}
+)
+
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
 Base = declarative_base()
 
 def get_db():
@@ -20,5 +24,3 @@ def get_db():
         yield db
     finally:
         db.close()
-
-

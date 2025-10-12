@@ -2,7 +2,6 @@ import os
 import re
 import json
 from typing import Dict, List, Any
-import spacy
 import PyPDF2
 from docx import Document
 import openai
@@ -12,13 +11,6 @@ load_dotenv()
 
 class ResumeParser:
     def __init__(self):
-        # Initialize spaCy model
-        try:
-            self.nlp = spacy.load("en_core_web_sm")
-        except OSError:
-            print("spaCy model not found. Please install: python -m spacy download en_core_web_sm")
-            self.nlp = None
-        
         # Initialize OpenAI
         openai.api_key = os.getenv("OPENAI_API_KEY")
         
@@ -90,14 +82,15 @@ class ResumeParser:
         return text
 
     def _extract_name(self, text: str) -> str:
-        """Extract candidate name using NLP"""
-        if not self.nlp:
-            return "Unknown"
-        
-        doc = self.nlp(text)
-        for ent in doc.ents:
-            if ent.label_ == "PERSON":
-                return ent.text
+        """Extract candidate name using simple pattern matching"""
+        # Look for common name patterns at the beginning of the document
+        lines = text.split('\n')[:10]  # Check first 10 lines
+        for line in lines:
+            line = line.strip()
+            if len(line) > 2 and len(line) < 50:  # Reasonable name length
+                # Check if it looks like a name (contains letters and possibly spaces)
+                if re.match(r'^[A-Za-z\s\.]+$', line) and not any(keyword in line.lower() for keyword in ['email', 'phone', 'address', 'resume', 'cv']):
+                    return line
         return "Unknown"
 
     def _extract_email(self, text: str) -> str:
@@ -127,15 +120,15 @@ class ResumeParser:
             if skill.lower() in text_lower:
                 found_skills.append(skill.title())
         
-        # Use NLP to find additional skills
-        if self.nlp:
-            doc = self.nlp(text)
-            for token in doc:
-                if token.pos_ in ["NOUN", "PROPN"] and len(token.text) > 3:
-                    if token.text.lower() not in [s.lower() for s in found_skills]:
-                        # Check if it's likely a skill
-                        if any(keyword in token.text.lower() for keyword in ["skill", "technology", "tool", "language"]):
-                            found_skills.append(token.text)
+        # Use simple pattern matching to find additional skills
+        # Look for words that might be skills (capitalized, technical terms)
+        words = re.findall(r'\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b', text)
+        for word in words:
+            if len(word) > 3 and word.lower() not in [s.lower() for s in found_skills]:
+                # Check if it's likely a skill (not common words)
+                common_words = ['the', 'and', 'for', 'with', 'from', 'this', 'that', 'work', 'company', 'university', 'college']
+                if word.lower() not in common_words:
+                    found_skills.append(word)
         
         return list(set(found_skills))  # Remove duplicates
 
@@ -175,14 +168,17 @@ class ResumeParser:
         return ""
 
     def _extract_location(self, text: str) -> str:
-        """Extract location"""
-        if not self.nlp:
-            return ""
+        """Extract location using simple pattern matching"""
+        # Look for common location patterns
+        location_patterns = [
+            r'\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*,\s*[A-Z]{2}\b',  # City, State
+            r'\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*,\s*[A-Z][a-z]+\b',  # City, Country
+        ]
         
-        doc = self.nlp(text)
-        for ent in doc.ents:
-            if ent.label_ == "GPE":  # Geopolitical entity
-                return ent.text
+        for pattern in location_patterns:
+            matches = re.findall(pattern, text)
+            if matches:
+                return matches[0]
         return ""
 
     def _extract_summary(self, text: str) -> str:
