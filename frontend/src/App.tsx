@@ -7,6 +7,9 @@ import UserDashboard from './pages/UserDashboard';
 import AdminDashboard from './pages/AdminDashboard';
 import CreateJob from './pages/CreateJob';
 import Interview from './pages/Interview';
+import EnhancedInterview from './pages/EnhancedInterview';
+import InterviewAnalytics from './pages/InterviewAnalytics';
+import DebugDashboard from './pages/DebugDashboard';
 import ProtectedRoute from './components/ProtectedRoute';
 
 function App() {
@@ -23,6 +26,10 @@ function App() {
                 <UserDashboard />
               </ProtectedRoute>
             } 
+          />
+          <Route 
+            path="/debug" 
+            element={<DebugDashboard />} 
           />
           <Route 
             path="/admin/dashboard" 
@@ -53,6 +60,22 @@ function App() {
             element={
               <ProtectedRoute requiredRole="user">
                 <Interview />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/enhanced-interview/:interviewId" 
+            element={
+              <ProtectedRoute requiredRole="user">
+                <EnhancedInterview />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/admin/interview-analytics" 
+            element={
+              <ProtectedRoute requiredRole="admin">
+                <InterviewAnalytics />
               </ProtectedRoute>
             } 
           />

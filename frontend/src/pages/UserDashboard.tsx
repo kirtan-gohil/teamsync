@@ -141,9 +141,9 @@ const UserDashboard: React.FC = () => {
           }
         });
         
-        // Navigate to interview after a short delay
+        // Navigate to enhanced interview after a short delay
         setTimeout(() => {
-          navigate(`/interview/${data.interview.id}`);
+          navigate(`/enhanced-interview/${data.interview.id}`);
         }, 2000);
       } else {
         const error = await response.json();

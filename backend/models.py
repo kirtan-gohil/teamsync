@@ -63,6 +63,19 @@ class Interview(Base):
     completed_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
+    # Enhanced interview data
+    video_url = Column(String, nullable=True)
+    audio_url = Column(String, nullable=True)
+    eye_tracking_data = Column(JSON, nullable=True)
+    speech_analysis = Column(JSON, nullable=True)
+    fraud_detection = Column(JSON, nullable=True)
+    attention_score = Column(Float, nullable=True)
+    communication_score = Column(Float, nullable=True)
+    technical_score = Column(Float, nullable=True)
+    overall_score = Column(Float, nullable=True)
+    admin_feedback_sent = Column(Boolean, default=False)
+    requires_review = Column(Boolean, default=False)
+    
     # Relationships
     candidate = relationship("Candidate", back_populates="interviews")
     job = relationship("Job", back_populates="interviews")

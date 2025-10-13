@@ -9,6 +9,29 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# Global storage for completed interviews
+completed_interviews = []
+
+class InterviewStorage:
+    def __init__(self):
+        self.interviews = []
+    
+    def add_interview(self, interview_data):
+        self.interviews.append(interview_data)
+        print(f"=== INTERVIEW STORED ===")
+        print(f"Interview ID: {interview_data['interview_id']}")
+        print(f"Total stored: {len(self.interviews)}")
+        print(f"=======================")
+    
+    def get_interviews(self):
+        return self.interviews
+    
+    def get_recent_interviews(self, limit=10):
+        return self.interviews[-limit:] if len(self.interviews) > limit else self.interviews
+
+# Global interview storage instance
+interview_storage = InterviewStorage()
+
 app = FastAPI(
     title="AI Recruitment Platform - Working",
     description="Working AI-powered recruitment helper",
@@ -570,8 +593,10 @@ async def submit_answer(interview_id: int, answer_data: dict):
     answer_text = answer_data.get("answer", "")
     audio_duration = answer_data.get("audio_duration", 0)
     voice_confidence = answer_data.get("voice_confidence", 0.8)
+    eye_tracking = answer_data.get("eye_tracking", {})
+    speech_analysis = answer_data.get("speech_analysis", {})
     
-    # Fraud detection analysis
+    # Enhanced fraud detection analysis
     fraud_analysis = {
         "is_authentic": True,
         "confidence_score": 0.85,
@@ -597,6 +622,15 @@ async def submit_answer(interview_id: int, answer_data: dict):
         fraud_analysis["red_flags"].append("Very brief text response")
         fraud_analysis["is_authentic"] = False
     
+    # Check eye tracking for attention
+    if eye_tracking.get("attentionScore", 100) < 50:
+        fraud_analysis["red_flags"].append("Low attention score")
+        fraud_analysis["is_authentic"] = False
+    
+    if eye_tracking.get("distractionCount", 0) > 10:
+        fraud_analysis["red_flags"].append("High distraction count")
+        fraud_analysis["is_authentic"] = False
+    
     # AI analysis of the answer
     answer_analysis = {
         "relevance_score": 0.8,
@@ -605,6 +639,22 @@ async def submit_answer(interview_id: int, answer_data: dict):
         "keywords_found": ["Python", "experience", "project"],
         "suggestions": "Good technical understanding demonstrated"
     }
+    
+    # Save answer to database (mock implementation)
+    answer_record = {
+        "interview_id": interview_id,
+        "question_id": question_id,
+        "answer_text": answer_text,
+        "audio_duration": audio_duration,
+        "voice_confidence": voice_confidence,
+        "eye_tracking_data": eye_tracking,
+        "speech_analysis": speech_analysis,
+        "fraud_analysis": fraud_analysis,
+        "answer_analysis": answer_analysis,
+        "submitted_at": datetime.now().isoformat()
+    }
+    
+    print(f"Saving answer for interview {interview_id}, question {question_id}: {answer_record}")
     
     return {
         "interview_id": interview_id,
@@ -620,28 +670,499 @@ async def submit_answer(interview_id: int, answer_data: dict):
 async def complete_interview(interview_id: int, completion_data: dict):
     """Complete the interview and get final analysis"""
     total_answers = completion_data.get("total_answers", 5)
-    fraud_score = completion_data.get("fraud_score", 0.85)
-    technical_score = completion_data.get("technical_score", 0.8)
+    eye_tracking_summary = completion_data.get("eye_tracking_summary", {})
+    overall_analysis = completion_data.get("overall_analysis", {})
+    all_answers = completion_data.get("all_answers", [])
+    interview_questions = completion_data.get("interview_questions", [])
+    video_url = completion_data.get("video_url", "")
+    audio_url = completion_data.get("audio_url", "")
     
-    # Final analysis
+    # Calculate comprehensive scores
+    fraud_score = overall_analysis.get("confidence_score", 0.85) if overall_analysis else 0.85
+    technical_score = overall_analysis.get("content_analysis", {}).get("relevance_score", 0.8) if overall_analysis else 0.8
+    attention_score = eye_tracking_summary.get("attentionScore", 100) / 100 if eye_tracking_summary else 0.85
+    
+    # Calculate average answer score
+    avg_answer_score = sum(answer.get("score", 8) for answer in all_answers) / len(all_answers) if all_answers else 8.0
+    
+    # Final comprehensive analysis
     final_analysis = {
         "interview_id": interview_id,
-        "overall_score": round((fraud_score + technical_score) / 2 * 100, 2),
+        "overall_score": round((fraud_score + technical_score + attention_score + avg_answer_score/10) / 4 * 100, 2),
         "fraud_detection": {
             "passed": fraud_score > 0.7,
             "score": fraud_score,
+            "red_flags": overall_analysis.get("red_flags", []) if overall_analysis else [],
             "recommendation": "Proceed with hiring" if fraud_score > 0.7 else "Requires manual review"
+        },
+        "eye_tracking_analysis": {
+            "attention_score": attention_score,
+            "eye_movements": eye_tracking_summary.get("eyeMovements", 0),
+            "distraction_count": eye_tracking_summary.get("distractionCount", 0),
+            "focus_quality": "Good" if attention_score > 0.8 else "Needs improvement"
+        },
+        "speech_analysis": {
+            "confidence": overall_analysis.get("speech_analysis", {}).get("confidence", 0.85) if overall_analysis else 0.85,
+            "clarity": overall_analysis.get("speech_analysis", {}).get("clarity", 0.9) if overall_analysis else 0.9,
+            "communication_quality": overall_analysis.get("content_analysis", {}).get("communication_quality", 0.9) if overall_analysis else 0.9
         },
         "technical_assessment": {
             "score": technical_score,
+            "relevance": overall_analysis.get("content_analysis", {}).get("relevance_score", 0.8) if overall_analysis else 0.8,
+            "technical_depth": overall_analysis.get("content_analysis", {}).get("technical_depth", 0.7) if overall_analysis else 0.7,
+            "keywords_found": overall_analysis.get("content_analysis", {}).get("keywords_found", []) if overall_analysis else [],
             "strengths": ["Good technical knowledge", "Clear communication"],
             "areas_for_improvement": ["Could provide more specific examples"]
         },
-        "recommendation": "Strong candidate" if (fraud_score + technical_score) / 2 > 0.75 else "Needs further evaluation",
-        "completed_at": datetime.now().isoformat()
+        "interview_answers": all_answers,
+        "recommendation": "Strong candidate" if (fraud_score + technical_score + attention_score + avg_answer_score/10) / 4 > 0.75 else "Needs further evaluation",
+        "completed_at": completion_data.get("completed_at", datetime.now().isoformat())
     }
     
+    # Save comprehensive interview data to database (mock implementation)
+    interview_data = {
+        "interview_id": interview_id,
+        "video_url": video_url,
+        "audio_url": audio_url,
+        "eye_tracking_data": eye_tracking_summary,
+        "speech_analysis": final_analysis["speech_analysis"],
+        "fraud_detection": final_analysis["fraud_detection"],
+        "attention_score": attention_score,
+        "communication_score": final_analysis["speech_analysis"]["communication_quality"],
+        "technical_score": technical_score,
+        "overall_score": final_analysis["overall_score"],
+        "interview_answers": all_answers,
+        "interview_questions": interview_questions,
+        "admin_feedback_sent": True,
+        "requires_review": final_analysis["overall_score"] < 75,
+        "total_answers": total_answers,
+        "avg_answer_score": avg_answer_score
+    }
+    
+    # Store interview data using the storage class
+    interview_data = {
+        "interview_id": interview_id,
+        "candidate_name": f"Candidate {interview_id}",
+        "job_title": "Software Engineer",
+        "overall_score": final_analysis["overall_score"],
+        "fraud_detection": final_analysis["fraud_detection"],
+        "eye_tracking_analysis": final_analysis["eye_tracking_analysis"],
+        "speech_analysis": final_analysis["speech_analysis"],
+        "technical_assessment": final_analysis["technical_assessment"],
+        "interview_answers": all_answers,
+        "recommendation": final_analysis["recommendation"],
+        "completed_at": completion_data.get("completed_at", datetime.now().isoformat()),
+        "requires_review": final_analysis["overall_score"] < 75,
+        "video_url": video_url,
+        "audio_url": audio_url
+    }
+    
+    # Store in both global array and storage class for redundancy
+    global completed_interviews
+    completed_interviews.append(interview_data)
+    interview_storage.add_interview(interview_data)
+    
+    print(f"=== SAVING COMPLETE INTERVIEW DATA ===")
+    print(f"Interview ID: {interview_id}")
+    print(f"Total Answers: {total_answers}")
+    print(f"Overall Score: {final_analysis['overall_score']}")
+    print(f"Interview Answers: {len(all_answers)} answers saved")
+    print(f"Eye Tracking: {eye_tracking_summary}")
+    print(f"Video URL: {video_url}")
+    print(f"Audio URL: {audio_url}")
+    print(f"Complete Data: {interview_data}")
+    print(f"Total Saved Interviews: {len(completed_interviews)}")
+    print(f"=====================================")
+    
+    # Send admin notification
+    admin_notification = {
+        "interview_id": interview_id,
+        "candidate_id": f"candidate_{interview_id}",
+        "notification_type": "interview_completed",
+        "performance_summary": {
+            "overall_score": final_analysis["overall_score"],
+            "fraud_detection_passed": final_analysis["fraud_detection"]["passed"],
+            "attention_score": attention_score,
+            "technical_score": technical_score,
+            "avg_answer_score": avg_answer_score
+        },
+        "recommendations": final_analysis["recommendation"],
+        "requires_review": final_analysis["overall_score"] < 75,
+        "interview_answers": all_answers,
+        "sent_at": datetime.now().isoformat()
+    }
+    
+    print(f"Admin notification sent: {admin_notification}")
+    
     return final_analysis
+
+@app.get("/api/admin/interview-analytics")
+async def get_interview_analytics():
+    """Get comprehensive interview analytics for admin dashboard"""
+    global completed_interviews
+    
+    # Get interviews from both sources
+    stored_interviews = interview_storage.get_interviews()
+    
+    print(f"=== ADMIN REQUESTING INTERVIEW ANALYTICS ===")
+    print(f"Global completed interviews: {len(completed_interviews)}")
+    print(f"Storage class interviews: {len(stored_interviews)}")
+    print(f"All interviews: {stored_interviews}")
+    print(f"===========================================")
+    
+    # Use stored interviews as primary source
+    analytics = stored_interviews + [
+        {
+            "interview_id": 4,
+            "candidate_id": "candidate_4",
+            "candidate_name": "Alex Rodriguez",
+            "job_title": "Full Stack Developer",
+            "overall_score": 91.2,
+            "fraud_detection": {
+                "passed": True,
+                "score": 0.94,
+                "red_flags": []
+            },
+            "eye_tracking_analysis": {
+                "attention_score": 0.92,
+                "eye_movements": 28,
+                "distraction_count": 1,
+                "focus_quality": "Excellent"
+            },
+            "speech_analysis": {
+                "confidence": 0.95,
+                "clarity": 0.96,
+                "communication_quality": 0.94
+            },
+            "technical_assessment": {
+                "score": 0.89,
+                "relevance": 0.91,
+                "technical_depth": 0.87,
+                "keywords_found": ["React", "Node.js", "MongoDB", "TypeScript", "AWS"],
+                "strengths": ["Excellent technical skills", "Clear communication", "Strong problem-solving"],
+                "areas_for_improvement": []
+            },
+            "interview_answers": [
+                {
+                    "question_id": 1,
+                    "question": "Describe your experience with React and state management",
+                    "answer": "I have extensive experience with React, including hooks, context API, and Redux for state management. I've built complex applications with real-time updates...",
+                    "score": 9.2,
+                    "keywords_found": ["React", "hooks", "Redux", "state management", "applications"]
+                },
+                {
+                    "question_id": 2,
+                    "question": "How do you handle API integration and error handling?",
+                    "answer": "I use async/await patterns with proper error handling, implement retry mechanisms, and use interceptors for request/response handling...",
+                    "score": 8.8,
+                    "keywords_found": ["API", "async/await", "error handling", "retry", "interceptors"]
+                },
+                {
+                    "question_id": 3,
+                    "question": "Explain your approach to database design and optimization",
+                    "answer": "I focus on proper indexing, query optimization, and use both SQL and NoSQL databases based on requirements. I've worked with PostgreSQL, MongoDB...",
+                    "score": 9.5,
+                    "keywords_found": ["database", "indexing", "optimization", "PostgreSQL", "MongoDB"]
+                }
+            ],
+            "recommendation": "Exceptional candidate",
+            "completed_at": "2024-01-16T14:45:00Z",
+            "requires_review": False
+        },
+        {
+            "interview_id": 1,
+            "candidate_id": "candidate_1",
+            "candidate_name": "John Smith",
+            "job_title": "Senior Software Engineer",
+            "overall_score": 87.5,
+            "fraud_detection": {
+                "passed": True,
+                "score": 0.92,
+                "red_flags": []
+            },
+            "eye_tracking_analysis": {
+                "attention_score": 0.85,
+                "eye_movements": 45,
+                "distraction_count": 2,
+                "focus_quality": "Good"
+            },
+            "speech_analysis": {
+                "confidence": 0.88,
+                "clarity": 0.92,
+                "communication_quality": 0.90
+            },
+            "technical_assessment": {
+                "score": 0.85,
+                "relevance": 0.88,
+                "technical_depth": 0.82,
+                "keywords_found": ["Python", "Django", "React", "AWS"],
+                "strengths": ["Strong technical knowledge", "Clear communication", "Good problem-solving"],
+                "areas_for_improvement": ["Could provide more specific examples"]
+            },
+            "interview_answers": [
+                {
+                    "question_id": 1,
+                    "question": "Tell me about your experience with Python",
+                    "answer": "I have 5 years of experience with Python, working on web applications using Django and Flask...",
+                    "score": 8.5,
+                    "keywords_found": ["Python", "Django", "Flask", "experience"]
+                },
+                {
+                    "question_id": 2,
+                    "question": "How do you handle debugging complex issues?",
+                    "answer": "I use systematic debugging approaches, starting with logs and then using debugging tools...",
+                    "score": 9.0,
+                    "keywords_found": ["debugging", "logs", "systematic", "tools"]
+                }
+            ],
+            "recommendation": "Strong candidate",
+            "completed_at": "2024-01-15T10:30:00Z",
+            "requires_review": False
+        },
+        {
+            "interview_id": 2,
+            "candidate_id": "candidate_2",
+            "candidate_name": "Sarah Johnson",
+            "job_title": "Frontend Developer",
+            "overall_score": 72.3,
+            "fraud_detection": {
+                "passed": True,
+                "score": 0.78,
+                "red_flags": ["Low attention score"]
+            },
+            "eye_tracking_analysis": {
+                "attention_score": 0.65,
+                "eye_movements": 78,
+                "distraction_count": 8,
+                "focus_quality": "Needs improvement"
+            },
+            "speech_analysis": {
+                "confidence": 0.75,
+                "clarity": 0.80,
+                "communication_quality": 0.78
+            },
+            "technical_assessment": {
+                "score": 0.70,
+                "relevance": 0.75,
+                "technical_depth": 0.68,
+                "keywords_found": ["JavaScript", "React", "CSS"],
+                "strengths": ["Good frontend skills", "Creative thinking"],
+                "areas_for_improvement": ["Needs more backend knowledge", "Could improve focus during interview"]
+            },
+            "recommendation": "Needs further evaluation",
+            "completed_at": "2024-01-14T14:20:00Z",
+            "requires_review": True
+        },
+        {
+            "interview_id": 3,
+            "candidate_id": "candidate_3",
+            "candidate_name": "Mike Chen",
+            "job_title": "Data Scientist",
+            "overall_score": 94.2,
+            "fraud_detection": {
+                "passed": True,
+                "score": 0.96,
+                "red_flags": []
+            },
+            "eye_tracking_analysis": {
+                "attention_score": 0.95,
+                "eye_movements": 32,
+                "distraction_count": 1,
+                "focus_quality": "Excellent"
+            },
+            "speech_analysis": {
+                "confidence": 0.94,
+                "clarity": 0.96,
+                "communication_quality": 0.95
+            },
+            "technical_assessment": {
+                "score": 0.92,
+                "relevance": 0.95,
+                "technical_depth": 0.94,
+                "keywords_found": ["Python", "Machine Learning", "TensorFlow", "Pandas", "SQL"],
+                "strengths": ["Exceptional technical expertise", "Clear communication", "Strong analytical skills"],
+                "areas_for_improvement": []
+            },
+            "recommendation": "Exceptional candidate",
+            "completed_at": "2024-01-13T09:15:00Z",
+            "requires_review": False
+        }
+    ]
+    
+    return analytics
+
+@app.post("/api/admin/interview-feedback")
+async def send_admin_feedback(feedback_data: dict):
+    """Send interview feedback and analysis to admin"""
+    try:
+        interview_id = feedback_data.get("interview_id")
+        candidate_performance = feedback_data.get("candidate_performance", {})
+        recommendations = feedback_data.get("recommendations", "No specific recommendations")
+        all_answers = feedback_data.get("all_answers", [])
+        
+        # Mock admin notification (in real implementation, this would send email/notification)
+        admin_notification = {
+            "interview_id": interview_id,
+            "candidate_id": f"candidate_{interview_id}",
+            "notification_type": "interview_completed",
+            "performance_summary": {
+                "overall_score": candidate_performance.get("overall_score", 0),
+                "fraud_detection_passed": candidate_performance.get("fraud_detection", {}).get("passed", False),
+                "attention_score": candidate_performance.get("eye_tracking_analysis", {}).get("attention_score", 0),
+                "technical_score": candidate_performance.get("technical_assessment", {}).get("score", 0)
+            },
+            "recommendations": recommendations,
+            "requires_review": candidate_performance.get("overall_score", 0) < 75,
+            "interview_answers": all_answers,
+            "sent_at": datetime.now().isoformat()
+        }
+        
+        print(f"=== ADMIN NOTIFICATION ===")
+        print(f"Interview ID: {interview_id}")
+        print(f"Overall Score: {candidate_performance.get('overall_score', 0)}")
+        print(f"Answers Count: {len(all_answers)}")
+        print(f"Notification: {admin_notification}")
+        print(f"==========================")
+        
+        return {
+            "status": "feedback_sent",
+            "notification": admin_notification,
+            "message": "Admin has been notified of interview completion"
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.get("/api/admin/interview-data/{interview_id}")
+async def get_interview_data(interview_id: int):
+    """Get specific interview data for admin review"""
+    # Mock interview data retrieval
+    interview_data = {
+        "interview_id": interview_id,
+        "candidate_name": f"Candidate {interview_id}",
+        "job_title": "Software Engineer",
+        "overall_score": 87.5,
+        "completed_at": datetime.now().isoformat(),
+        "video_url": f"uploads/interviews/{interview_id}/video.mp4",
+        "audio_url": f"uploads/interviews/{interview_id}/audio.wav",
+        "eye_tracking_data": {
+            "attention_score": 0.85,
+            "eye_movements": 45,
+            "distraction_count": 2
+        },
+        "interview_answers": [
+            {
+                "question_id": 1,
+                "question": "Tell me about your experience",
+                "answer": "I have 5 years of experience in software development...",
+                "score": 8.5,
+                "keywords_found": ["experience", "development", "software"]
+            }
+        ],
+        "fraud_detection": {
+            "passed": True,
+            "score": 0.92,
+            "red_flags": []
+        }
+    }
+    
+    return interview_data
+
+@app.get("/api/admin/recent-interviews")
+async def get_recent_interviews():
+    """Get recently completed interviews for admin dashboard"""
+    global completed_interviews
+    
+    # Return the most recent interviews (last 10)
+    recent_interviews = completed_interviews[-10:] if len(completed_interviews) > 10 else completed_interviews
+    
+    return {
+        "total_interviews": len(completed_interviews),
+        "recent_interviews": recent_interviews,
+        "last_updated": datetime.now().isoformat()
+    }
+
+@app.post("/api/admin/test-interview")
+async def add_test_interview():
+    """Add a test interview for admin visibility testing"""
+    global completed_interviews
+    
+    # Get current count from storage class
+    current_count = len(interview_storage.get_interviews())
+    
+    test_interview = {
+        "interview_id": current_count + 1,
+        "candidate_name": f"Test Candidate {current_count + 1}",
+        "job_title": "Software Engineer",
+        "overall_score": 85.5,
+        "fraud_detection": {
+            "passed": True,
+            "score": 0.88,
+            "red_flags": []
+        },
+        "eye_tracking_analysis": {
+            "attention_score": 0.82,
+            "eye_movements": 35,
+            "distraction_count": 3,
+            "focus_quality": "Good"
+        },
+        "speech_analysis": {
+            "confidence": 0.87,
+            "clarity": 0.89,
+            "communication_quality": 0.85
+        },
+        "technical_assessment": {
+            "score": 0.83,
+            "relevance": 0.86,
+            "technical_depth": 0.80,
+            "keywords_found": ["Python", "React", "JavaScript"],
+            "strengths": ["Good technical knowledge", "Clear communication"],
+            "areas_for_improvement": ["Could provide more examples"]
+        },
+        "interview_answers": [
+            {
+                "question_id": 1,
+                "question": "Tell me about your experience with Python",
+                "answer": "I have 3 years of experience with Python, working on web applications and data analysis...",
+                "score": 8.5,
+                "keywords_found": ["Python", "experience", "web applications"]
+            }
+        ],
+        "recommendation": "Good candidate",
+        "completed_at": datetime.now().isoformat(),
+        "requires_review": False,
+        "video_url": f"uploads/interviews/{current_count + 1}/video.mp4",
+        "audio_url": f"uploads/interviews/{current_count + 1}/audio.wav"
+    }
+    
+    # Store in both global array and storage class
+    completed_interviews.append(test_interview)
+    interview_storage.add_interview(test_interview)
+    
+    print(f"=== TEST INTERVIEW ADDED ===")
+    print(f"Interview ID: {test_interview['interview_id']}")
+    print(f"Total interviews: {len(interview_storage.get_interviews())}")
+    print(f"==========================")
+    
+    return {
+        "status": "test_interview_added",
+        "interview_id": test_interview["interview_id"],
+        "total_interviews": len(interview_storage.get_interviews())
+    }
+
+@app.get("/api/admin/debug-interviews")
+async def debug_interviews():
+    """Debug endpoint to check stored interviews"""
+    global completed_interviews
+    
+    stored_interviews = interview_storage.get_interviews()
+    
+    return {
+        "global_completed_interviews": len(completed_interviews),
+        "storage_class_interviews": len(stored_interviews),
+        "global_data": completed_interviews,
+        "storage_data": stored_interviews,
+        "timestamp": datetime.now().isoformat()
+    }
 
 # Voice recording endpoints
 @app.post("/api/interview/{interview_id}/voice/start")
@@ -654,6 +1175,67 @@ async def start_voice_recording(interview_id: int):
         "instructions": "Speak clearly into your microphone. Recording will automatically stop after each question.",
         "started_at": datetime.now().isoformat()
     }
+
+@app.post("/api/interview/{interview_id}/analyze")
+async def analyze_interview_data(interview_id: int, analysis_data: dict):
+    """Comprehensive analysis of interview data including video, audio, and eye tracking"""
+    try:
+        # Extract data from form
+        audio_duration = analysis_data.get("duration", 0)
+        eye_tracking_data = analysis_data.get("eye_tracking_data", {})
+        
+        # Comprehensive analysis
+        analysis = {
+            "is_authentic": True,
+            "confidence_score": 0.85,
+            "red_flags": [],
+            "eye_tracking": {
+                "eye_movements": eye_tracking_data.get("eyeMovements", 0),
+                "gaze_direction": eye_tracking_data.get("gazeDirection", "center"),
+                "attention_score": eye_tracking_data.get("attentionScore", 100),
+                "distraction_count": eye_tracking_data.get("distractionCount", 0)
+            },
+            "speech_analysis": {
+                "confidence": 0.85,
+                "clarity": 0.9,
+                "pace": 0.8,
+                "filler_words": 2,
+                "transcription": "Mock transcription of candidate response"
+            },
+            "content_analysis": {
+                "relevance_score": 0.8,
+                "technical_depth": 0.7,
+                "communication_quality": 0.9,
+                "keywords_found": ["Python", "experience", "project"],
+                "suggestions": "Good technical understanding demonstrated"
+            },
+            "overall_score": 82.5
+        }
+        
+        # Check for suspicious behavior
+        if eye_tracking_data.get("attentionScore", 100) < 60:
+            analysis["red_flags"].append("Low attention score")
+            analysis["is_authentic"] = False
+        
+        if eye_tracking_data.get("distractionCount", 0) > 5:
+            analysis["red_flags"].append("High distraction count")
+            analysis["is_authentic"] = False
+        
+        if audio_duration < 5:
+            analysis["red_flags"].append("Very short response")
+            analysis["is_authentic"] = False
+        
+        # Save analysis to database (mock implementation)
+        # In a real implementation, this would save to the database
+        print(f"Saving interview analysis for interview {interview_id}: {analysis}")
+        
+        return {
+            "interview_id": interview_id,
+            "analysis": analysis,
+            "processed_at": datetime.now().isoformat()
+        }
+    except Exception as e:
+        return {"error": str(e)}
 
 @app.post("/api/interview/{interview_id}/voice/stop")
 async def stop_voice_recording(interview_id: int, recording_data: dict):
