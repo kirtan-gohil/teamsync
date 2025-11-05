@@ -1,26 +1,55 @@
-from fastapi import FastAPI, HTTPException, Depends, UploadFile, File, status
+import os
+from datetime import timedelta
+from typing import List, Optional
+
+from dotenv import load_dotenv
+from fastapi import (
+    Depends,
+    FastAPI,
+    File,
+    HTTPException,
+    UploadFile,
+    status,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer
 from sqlalchemy.orm import Session
-from typing import List, Optional
-import os
-from dotenv import load_dotenv
-from datetime import timedelta
 
-from database import get_db, engine, Base
-from models import Candidate, Job, Interview, Match, User, UserResume, UserJobMatch
-from schemas import (
-    CandidateCreate, CandidateResponse, 
-    JobCreate, JobResponse,
-    InterviewCreate, InterviewResponse,
-    MatchResponse, UserLogin, UserRegister, Token, UserResponse,
-    UserResumeResponse, JobMatchResponse
+from database import Base, engine, get_db
+from dependencies import get_admin_user, get_current_active_user
+from models import (
+    Candidate,
+    Interview,
+    Job,
+    Match,
+    User,
+    UserJobMatch,
+    UserResume,
 )
-from services.resume_parser import ResumeParser
-from services.matching_engine import MatchingEngine
+from schemas import (
+    CandidateCreate,
+    CandidateResponse,
+    InterviewCreate,
+    InterviewResponse,
+    JobCreate,
+    JobMatchResponse,
+    JobResponse,
+    MatchResponse,
+    Token,
+    UserLogin,
+    UserRegister,
+    UserResponse,
+    UserResumeResponse,
+)
+from services.auth import (
+    ACCESS_TOKEN_EXPIRE_MINUTES,
+    authenticate_user,
+    create_access_token,
+    create_user,
+)
 from services.interview_ai import InterviewAI
-from services.auth import authenticate_user, create_user, create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES
-from dependencies import get_current_active_user, get_admin_user
+from services.matching_engine import MatchingEngine
+from services.resume_parser import ResumeParser
 
 load_dotenv()
 
@@ -51,7 +80,10 @@ interview_ai = InterviewAI()
 
 @app.get("/")
 async def root():
-    return {"message": "AI Recruitment Platform API", "status": "running"}
+    return {
+        "message": "AI Recruitment Platform API",
+        "status": "running",
+    }
 
 @app.get("/health")
 async def health_check():
@@ -64,15 +96,15 @@ async def register(user: UserRegister, db: Session = Depends(get_db)):
     if db_user:
         raise HTTPException(
             status_code=400,
-            detail="Email already registered"
+            detail="Email already registered",
         )
-    
+
     db_user = create_user(
         db=db,
         email=user.email,
         password=user.password,
         full_name=user.full_name,
-        role="user"
+        role="user",
     )
     
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -83,12 +115,16 @@ async def register(user: UserRegister, db: Session = Depends(get_db)):
     return {
         "access_token": access_token,
         "token_type": "bearer",
-        "user": db_user
+        "user": db_user,
     }
 
 @app.post("/api/auth/login", response_model=Token)
-async def login(user_credentials: UserLogin, db: Session = Depends(get_db)):
-    user = authenticate_user(db, user_credentials.email, user_credentials.password)
+async def login(
+    user_credentials: UserLogin, db: Session = Depends(get_db)
+):
+    user = authenticate_user(
+        db, user_credentials.email, user_credentials.password
+    )
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -104,16 +140,20 @@ async def login(user_credentials: UserLogin, db: Session = Depends(get_db)):
     return {
         "access_token": access_token,
         "token_type": "bearer",
-        "user": user
+        "user": user,
     }
 
 @app.get("/api/auth/me", response_model=UserResponse)
-async def get_current_user_info(current_user: User = Depends(get_current_active_user)):
+async def get_current_user_info(
+    current_user: User = Depends(get_current_active_user),
+):
     return current_user
 
 # Candidate endpoints
 @app.post("/api/candidates/", response_model=CandidateResponse)
-async def create_candidate(candidate: CandidateCreate, db: Session = Depends(get_db)):
+async def create_candidate(
+    candidate: CandidateCreate, db: Session = Depends(get_db)
+):
     db_candidate = Candidate(**candidate.dict())
     db.add(db_candidate)
     db.commit()
@@ -121,12 +161,16 @@ async def create_candidate(candidate: CandidateCreate, db: Session = Depends(get
     return db_candidate
 
 @app.get("/api/candidates/", response_model=List[CandidateResponse])
-async def get_candidates(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+async def get_candidates(
+    skip: int = 0, limit: int = 100, db: Session = Depends(get_db)
+):
     candidates = db.query(Candidate).offset(skip).limit(limit).all()
     return candidates
 
 @app.post("/api/candidates/upload-resume")
-async def upload_resume(file: UploadFile = File(...), db: Session = Depends(get_db)):
+async def upload_resume(
+    file: UploadFile = File(...), db: Session = Depends(get_db)
+):
     try:
         file_path = f"uploads/{file.filename}"
         os.makedirs("uploads", exist_ok=True)
@@ -135,7 +179,7 @@ async def upload_resume(file: UploadFile = File(...), db: Session = Depends(get_
             content = await file.read()
             buffer.write(content)
         
-        parsed_data = await resume_parser.parse_resume(file_path)
+        parsed_data = resume_parser.parse_resume(file_path)
         
         candidate = Candidate(
             name=parsed_data.get("name", "Unknown"),
@@ -144,7 +188,7 @@ async def upload_resume(file: UploadFile = File(...), db: Session = Depends(get_
             skills=parsed_data.get("skills", []),
             experience_years=parsed_data.get("experience_years", 0),
             education=parsed_data.get("education", ""),
-            raw_data=parsed_data
+            raw_data=parsed_data,
         )
         
         db.add(candidate)
@@ -154,7 +198,7 @@ async def upload_resume(file: UploadFile = File(...), db: Session = Depends(get_
         return {
             "message": "Resume uploaded and parsed successfully",
             "candidate_id": candidate.id,
-            "parsed_data": parsed_data
+            "parsed_data": parsed_data,
         }
         
     except Exception as e:
@@ -162,7 +206,9 @@ async def upload_resume(file: UploadFile = File(...), db: Session = Depends(get_
 
 # Job endpoints
 @app.post("/api/jobs/", response_model=JobResponse)
-async def create_job(job: JobCreate, db: Session = Depends(get_db)):
+async def create_job(
+    job: JobCreate, db: Session = Depends(get_db)
+):
     db_job = Job(**job.dict())
     db.add(db_job)
     db.commit()
@@ -170,7 +216,9 @@ async def create_job(job: JobCreate, db: Session = Depends(get_db)):
     return db_job
 
 @app.get("/api/jobs/", response_model=List[JobResponse])
-async def get_jobs(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+async def get_jobs(
+    skip: int = 0, limit: int = 100, db: Session = Depends(get_db)
+):
     jobs = db.query(Job).offset(skip).limit(limit).all()
     return jobs
 
@@ -203,7 +251,7 @@ async def get_matches(job_id: int, db: Session = Depends(get_db)):
                 candidate_id=candidate.id,
                 job_id=job_id,
                 match_score=match_score,
-                reasoning=reasoning
+                reasoning=reasoning,
             )
             db.add(match)
         else:
@@ -212,12 +260,14 @@ async def get_matches(job_id: int, db: Session = Depends(get_db)):
         
         db.commit()
         
-        matches.append(MatchResponse(
-            candidate=candidate,
-            job=job,
-            match_score=match_score,
-            reasoning=reasoning
-        ))
+        matches.append(
+            MatchResponse(
+                candidate=candidate,
+                job=job,
+                match_score=match_score,
+                reasoning=reasoning,
+            )
+        )
     
     matches.sort(key=lambda x: x.match_score, reverse=True)
     return matches
@@ -231,7 +281,7 @@ async def create_interview(interview: InterviewCreate, db: Session = Depends(get
     db_interview = Interview(
         **interview.dict(),
         questions=questions,
-        status="scheduled"
+        status="scheduled",
     )
     db.add(db_interview)
     db.commit()
@@ -239,7 +289,9 @@ async def create_interview(interview: InterviewCreate, db: Session = Depends(get
     return db_interview
 
 @app.post("/api/interviews/{interview_id}/conduct")
-async def conduct_interview(interview_id: int, responses: List[str], db: Session = Depends(get_db)):
+async def conduct_interview(
+    interview_id: int, responses: List[str], db: Session = Depends(get_db)
+):
     interview = db.query(Interview).filter(Interview.id == interview_id).first()
     if not interview:
         raise HTTPException(status_code=404, detail="Interview not found")
@@ -256,7 +308,7 @@ async def conduct_interview(interview_id: int, responses: List[str], db: Session
     return {
         "message": "Interview completed successfully",
         "analysis": analysis,
-        "score": interview.score
+        "score": interview.score,
     }
 
 @app.get("/api/interviews/{interview_id}", response_model=InterviewResponse)
@@ -280,7 +332,7 @@ async def upload_user_resume(
             content = await file.read()
             buffer.write(content)
         
-        parsed_data = await resume_parser.parse_resume(file_path)
+        parsed_data = resume_parser.parse_resume(file_path)
         
         user_resume = UserResume(
             user_id=current_user.id,
@@ -288,7 +340,7 @@ async def upload_user_resume(
             skills=parsed_data.get("skills", []),
             experience_years=parsed_data.get("experience_years", 0),
             education=parsed_data.get("education", ""),
-            raw_data=parsed_data
+            raw_data=parsed_data,
         )
         
         db.add(user_resume)
@@ -303,9 +355,13 @@ async def upload_user_resume(
 @app.get("/api/user/resumes", response_model=List[UserResumeResponse])
 async def get_user_resumes(
     current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
-    resumes = db.query(UserResume).filter(UserResume.user_id == current_user.id).all()
+    resumes = (
+        db.query(UserResume)
+        .filter(UserResume.user_id == current_user.id)
+        .all()
+    )
     return resumes
 
 @app.get("/api/user/job-matches", response_model=List[JobMatchResponse])
@@ -318,13 +374,21 @@ async def get_user_job_matches(
     ).order_by(UserResume.created_at.desc()).first()
     
     if not latest_resume:
-        raise HTTPException(status_code=404, detail="No resume found. Please upload a resume first.")
+        raise HTTPException(
+            status_code=404,
+            detail="No resume found. Please upload a resume first.",
+        )
     
     jobs = db.query(Job).filter(Job.status == "active").all()
     matches = []
     
     for job in jobs:
-        match_score, matched_skills, missing_skills, reasoning = await matching_engine.calculate_user_job_match(
+        (
+            match_score,
+            matched_skills,
+            missing_skills,
+            reasoning,
+        ) = await matching_engine.calculate_user_job_match(
             latest_resume, job
         )
         
@@ -341,7 +405,7 @@ async def get_user_job_matches(
                 match_percentage=match_score,
                 matched_skills=matched_skills,
                 missing_skills=missing_skills,
-                reasoning=reasoning
+                reasoning=reasoning,
             )
             db.add(match_record)
         else:
@@ -352,14 +416,18 @@ async def get_user_job_matches(
         
         db.commit()
         
-        matches.append(JobMatchResponse(
-            job=job,
-            match_percentage=match_score,
-            matched_skills=matched_skills,
-            missing_skills=missing_skills,
-            reasoning=reasoning,
-            created_at=existing_match.created_at if existing_match else None
-        ))
+        matches.append(
+            JobMatchResponse(
+                job=job,
+                match_percentage=match_score,
+                matched_skills=matched_skills,
+                missing_skills=missing_skills,
+                reasoning=reasoning,
+                created_at=existing_match.created_at
+                if existing_match
+                else None,
+            )
+        )
     
     matches.sort(key=lambda x: x.match_percentage, reverse=True)
     return matches

@@ -145,6 +145,7 @@ const AdminDashboard: React.FC = () => {
                 { id: 'jobs', name: 'Jobs' },
                 { id: 'candidates', name: 'Candidates' },
                 { id: 'interviews', name: 'Interviews' },
+                { id: 'analytics', name: 'Interview Analytics' },
               ].map((tab) => (
                 <button
                   key={tab.id}
@@ -368,6 +369,50 @@ const AdminDashboard: React.FC = () => {
                     </div>
                   </div>
                 ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Interview Analytics Tab */}
+        {activeTab === 'analytics' && (
+          <div className="bg-white rounded-lg shadow">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <div className="flex justify-between items-center">
+                <h3 className="text-lg font-medium text-gray-900">Interview Analytics</h3>
+                <button 
+                  onClick={() => window.location.href = '/admin/interview-analytics'}
+                  className="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700"
+                >
+                  View Detailed Analytics
+                </button>
+              </div>
+            </div>
+            <div className="p-6">
+              <div className="text-center py-8">
+                <div className="text-gray-500 mb-4">
+                  <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                  </svg>
+                </div>
+                <h3 className="text-lg font-medium text-gray-900 mb-2">Enhanced Interview Analytics</h3>
+                <p className="text-gray-600 mb-6">
+                  View comprehensive analysis of candidate interviews including eye tracking, speech analysis, and fraud detection.
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-left">
+                  <div className="bg-blue-50 p-4 rounded-lg">
+                    <h4 className="font-semibold text-blue-900 mb-2">👁️ Eye Tracking</h4>
+                    <p className="text-sm text-blue-700">Monitor attention, focus, and distraction patterns during interviews</p>
+                  </div>
+                  <div className="bg-green-50 p-4 rounded-lg">
+                    <h4 className="font-semibold text-green-900 mb-2">🎤 Speech Analysis</h4>
+                    <p className="text-sm text-green-700">Analyze confidence, clarity, and communication quality</p>
+                  </div>
+                  <div className="bg-red-50 p-4 rounded-lg">
+                    <h4 className="font-semibold text-red-900 mb-2">🔒 Fraud Detection</h4>
+                    <p className="text-sm text-red-700">Detect suspicious behavior and ensure interview authenticity</p>
+                  </div>
+                </div>
               </div>
             </div>
           </div>

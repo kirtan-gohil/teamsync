@@ -9,7 +9,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from database import get_db, engine, Base
 from models import User
-from services.auth import get_password_hash
+import hashlib
 
 def create_admin_user():
     """Create an admin user"""
@@ -26,10 +26,11 @@ def create_admin_user():
             print("Admin user already exists!")
             return
         
-        # Create admin user
+        # Create admin user with simple hash for now
+        password_hash = hashlib.sha256("admin".encode()).hexdigest()
         admin_user = User(
             email="admin@teamsync.com",
-            hashed_password=get_password_hash("admin123"),
+            hashed_password=password_hash,
             full_name="System Administrator",
             role="admin",
             is_active=True
@@ -41,7 +42,7 @@ def create_admin_user():
         
         print("✅ Admin user created successfully!")
         print(f"Email: admin@teamsync.com")
-        print(f"Password: admin123")
+        print(f"Password: admin")
         print(f"Role: admin")
         
     except Exception as e:
